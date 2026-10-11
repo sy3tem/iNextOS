@@ -1,0 +1,35 @@
+server:
+  host: "127.0.0.1"
+  port: "8080"
+  mode: "release"
+
+database:
+  path: "./data/roceos.db"
+
+redis:
+  host: "localhost"
+  port: "6379"
+  password: ""
+  db: 0
+
+jwt:
+  secret: ""
+  expire_hours: 24
+  refresh_hours: 168
+
+log:
+  level: "info"
+  path: "./logs"
+
+storage:
+  base_path: "/storage"
+  max_file_size: 10737418240
+
+browser:
+  chrome_path: "/usr/bin/chromium"
+
+update:
+  channel: stable
+  install_dir: /opt/roceos
+  server_url: http://update.roceos.com:14380
+  work_dir: /tmp

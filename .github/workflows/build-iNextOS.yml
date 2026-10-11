@@ -33,6 +33,8 @@ on:
     branches: [easepi-v26.02, main]
     paths:
       - "config/boards/nanopi-r28s.csc"
+      - "config/bootenv/r28s.txt"
+      - "config/roceos/**"
       - "patch/kernel/archive/rockchip64-6.19/**"
       - ".github/workflows/build-iNextOS.yml"
 

@@ -254,9 +254,22 @@
 	phy-mode = "rgmii-rxid";
 	phy-handle = <&rgmii_phy>;
 	phy-supply = <&vcc_3v3>;
+	/*
+	 * The RTL8211F has to be taken out of reset by the MAC, before the MDIO
+	 * bus is scanned: stmmac_mdio_reset() runs inside of_mdiobus_register(),
+	 * i.e. while the MAC probes -- long before any PHY driver is bound.  A
+	 * reset-gpios on the ethernet-phy node is therefore useless here (the
+	 * PHY can never be enumerated to begin with), and the PHY would come up
+	 * as "MDIO device at address 1 is missing" / "cannot attach to PHY".
+	 * Reset is 20ms asserted / 100ms released, per the RTL8211F datasheet.
+	 */
+	snps,reset-gpio = <&gpio4 RK_PC2 GPIO_ACTIVE_LOW>;
+	snps,reset-active-low;
+	snps,reset-delays-us = <0 20000 100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&rgmii_miim>, <&rgmii_tx_bus2>, <&rgmii_rx_bus2>,
-		    <&rgmii_rgmii_clk>, <&rgmii_rgmii_bus>, <&eth_pins>;
+		    <&rgmii_rgmii_clk>, <&rgmii_rgmii_bus>, <&eth_pins>,
+		    <&gmac1_rstn_l>;
 	tx_delay = <0x30>;
 	status = "okay";
 };
@@ -287,11 +300,18 @@
 	rgmii_phy: ethernet-phy@1 {
 		compatible = "ethernet-phy-ieee802.3-c22";
 		reg = <0x1>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&gmac1_rstn_l>;
-		reset-assert-us = <20000>;
-		reset-deassert-us = <100000>;
-		reset-gpios = <&gpio4 RK_PC2 GPIO_ACTIVE_LOW>;
+		/*
+		 * Same LED configuration the vendor ships for this board (their
+		 * property is called "realtek,ledsel").  In this kernel the
+		 * of-based LED hook is
+		 * net-phy-realtek-add-rtl8211x-LED-configuration-from-OF.patch,
+		 * which reads "realtek,led-data" and writes it to page 0xd04
+		 * register 0x10.  Note this is a different node to the three SoC
+		 * GPIO LEDs above: those are the front-panel ones, this one
+		 * configures the LEDs built into the RJ45 jack.
+		 */
+		realtek,led-data = <0xae00>;
+		/* no reset-gpios here on purpose, see &gmac1 above */
 	};
 };
 

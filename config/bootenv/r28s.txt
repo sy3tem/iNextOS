@@ -1,0 +1,15 @@
+# NanoPi R28S boot environment (used instead of config/bootenv/rockchip64.txt).
+#
+# verbosity=7  -> the boot script turns this into loglevel=7.  With the family
+#                 default of 1 nothing at all is printed to the console after
+#                 "Starting kernel ...", which makes a boot look like a hang.
+# console=serial -> keeps the HDMI-less video console (tty1) out of the picture;
+#                 with "both" tty1 is last on the cmdline, so /dev/console ends
+#                 up on tty1 and systemd writes there instead of to UART0.
+# extraargs    -> grab the very first kernel messages as well; the R28S debug
+#                 UART is UART0 at 0xff9f0000 (alias serial0), not the Bluetooth
+#                 UART2 that most rk35xx boards use.
+verbosity=7
+bootlogo=false
+console=serial
+extraargs=earlycon=uart8250,mmio32,0xff9f0000
