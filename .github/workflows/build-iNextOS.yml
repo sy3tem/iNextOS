@@ -1,0 +1,110 @@
+name: Build iNextOS
+
+# Builds an iNextOS (Debian) image from this repository, which is a fork of
+# jjm2473/armbian-easepi (itself a fork of armbian/build).  The whole Armbian
+# build framework lives on the default branch, so ./compile.sh runs right here.
+#
+# workflow_dispatch inputs:
+#   board    config/boards/<board>.csc
+#   kernel   kernel branch: edge = mainline 6.19, current = mainline 6.18
+#   release  Debian release (trixie / bookworm / noble ...)
+#   minimal  BUILD_MINIMAL
+
+on:
+  workflow_dispatch:
+    inputs:
+      board:
+        description: "Board (config/boards/<board>.csc)"
+        required: true
+        default: nanopi-r28s
+      kernel:
+        description: "Kernel branch (edge = mainline 6.19, current = mainline 6.18)"
+        required: true
+        default: edge
+      release:
+        description: "Debian release"
+        required: true
+        default: trixie
+      minimal:
+        description: "BUILD_MINIMAL (yes/no)"
+        required: true
+        default: "no"
+  push:
+    branches: [easepi-v26.02, main]
+    paths:
+      - "config/boards/nanopi-r28s.csc"
+      - "patch/kernel/archive/rockchip64-6.19/**"
+      - ".github/workflows/build-iNextOS.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ inputs.board || 'nanopi-r28s' }} / ${{ inputs.kernel || 'edge' }} / ${{ inputs.release || 'trixie' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 480
+    steps:
+      - name: Checkout this fork (it *is* the build framework)
+        uses: actions/checkout@v6
+
+      - name: Free disk space (Armbian wants a lot more than the runner has)
+        uses: descriptinc/free-disk-space@main
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Install build requirements
+        run: |
+          sudo ./compile.sh requirements
+          sudo chown -R "$USER:$USER" .
+
+      - name: Build image
+        run: |
+          ./compile.sh build \
+            BOARD="${{ inputs.board || 'nanopi-r28s' }}" \
+            BRANCH="${{ inputs.kernel || 'edge' }}" \
+            RELEASE="${{ inputs.release || 'trixie' }}" \
+            BUILD_MINIMAL="${{ inputs.minimal || 'no' }}" \
+            BUILD_DESKTOP="no" \
+            KERNEL_CONFIGURE="no" \
+            COMPRESS_OUTPUTIMAGE="sha,img,xz" \
+            EXPERT="yes"
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          cp -v output/images/*.img.xz        out/ 2>/dev/null || true
+          cp -v output/images/*.img.xz.sha    out/ 2>/dev/null || true
+          cp -v output/images/*.sha256        out/ 2>/dev/null || true
+          cp -v output/images/*.txt           out/ 2>/dev/null || true
+          ls -la out/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: iNextOS-${{ inputs.board || 'nanopi-r28s' }}-${{ inputs.kernel || 'edge' }}-${{ inputs.release || 'trixie' }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: inextos-${{ inputs.board || 'nanopi-r28s' }}-${{ inputs.kernel || 'edge' }}-${{ inputs.release || 'trixie' }}-${{ github.run_number }}
+          name: "iNextOS ${{ inputs.board || 'nanopi-r28s' }} (${{ inputs.kernel || 'edge' }}, ${{ inputs.release || 'trixie' }}) #${{ github.run_number }}"
+          artifacts: "out/*"
+          allowUpdates: true
+          replacesArtifacts: true
+          body: |
+            iNextOS for FriendlyElec NanoPi R28S (Rockchip RK3528A).
+
+            - Kernel: Linux 6.19 mainline (`rockchip64`), Debian `${{ inputs.release || 'trixie' }}`
+            - eMMC boot (GPT), console on UART0 (`ttyS0`, 1500000)
+            - 2x GbE: port 1 = SoC gmac + RTL8211F, port 2 = PCIe RTL8111H
+            - Management port: `eth1` (PCIe, silkscreen port 2) -> static `192.168.100.1`
+            - WiFi: AIC8800 over SDIO (`mmc2`)
