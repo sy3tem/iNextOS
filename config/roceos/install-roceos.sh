@@ -464,10 +464,24 @@ fi
 # nginx: the RoceOS site claims "listen 80 default_server" (and 443), so the
 # distro's own default site has to go or nginx refuses to start with
 # "duplicate default server".
+#
+# It must be moved OUT of sites-enabled entirely -- nginx includes
+# sites-enabled/* regardless of extension, so merely renaming it to
+# default.disabled-by-roceos inside that directory keeps it loaded and the
+# collision persists.  Move it next to its original under sites-available
+# (which is not included) so nothing is lost.
 if [ -e "$(P /etc/nginx/sites-enabled/default)" ]; then
-	mv -f "$(P /etc/nginx/sites-enabled/default)" "$(P /etc/nginx/sites-enabled/default.disabled-by-roceos)" 2>/dev/null ||
+	mv -f "$(P /etc/nginx/sites-enabled/default)" \
+		"$(P /etc/nginx/sites-available/default.disabled-by-roceos)" 2>/dev/null ||
 		rm -f "$(P /etc/nginx/sites-enabled/default)"
 	log "disabled the distro nginx default site"
+fi
+# Clean up the broken shape produced by earlier revisions of this script.
+if [ -e "$(P /etc/nginx/sites-enabled/default.disabled-by-roceos)" ]; then
+	mv -f "$(P /etc/nginx/sites-enabled/default.disabled-by-roceos)" \
+		"$(P /etc/nginx/sites-available/default.disabled-by-roceos)" 2>/dev/null ||
+		rm -f "$(P /etc/nginx/sites-enabled/default.disabled-by-roceos)"
+	log "cleaned up a stale disabled default site"
 fi
 ln -sf /etc/nginx/sites-available/roceos.conf "$(P /etc/nginx/sites-enabled/roceos.conf)"
 
@@ -497,6 +511,27 @@ if [ "$WANT_ENABLE" = 1 ]; then
 		ln -sf "/etc/systemd/system/$u.service" "$WANTS/$u.service"
 	done
 	log "enabled: roceos roceos-guard roceos-vision"
+fi
+
+# --------------------------------------------------------------------------
+# Live install: make nginx actually pick up the new site
+# --------------------------------------------------------------------------
+# Without this the daemon keeps serving whatever it was started with (in
+# practice: the distro "Welcome to nginx!" page) until someone reloads it by
+# hand.  Fail loudly instead of leaving a half-working box behind.
+if [ "$ROOT" = "/" ] && command -v nginx >/dev/null 2>&1; then
+	if nginx -t >/dev/null 2>&1; then
+		if command -v systemctl >/dev/null 2>&1; then
+			systemctl reload nginx 2>/dev/null ||
+				systemctl restart nginx 2>/dev/null ||
+				warn "could not reload nginx; run 'systemctl reload nginx' by hand"
+		fi
+		log "nginx reloaded with the roceos site"
+	else
+		warn "nginx configuration test FAILED -- nothing was reloaded."
+		warn "fix the error below, then run 'systemctl reload nginx':"
+		nginx -t 2>&1 | sed 's/^/    /' >&2 || true
+	fi
 fi
 
 # --------------------------------------------------------------------------
